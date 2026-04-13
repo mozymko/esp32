@@ -1,68 +1,272 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>ESP32 Sensor Dashboard</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 
-  <!-- Firebase -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+<title>ESP32 Dashboard</title>
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyAHyqAn2BIzD11xoM2kouS0j4j8guwWKEY",
-      databaseURL: "https://esp32-a4c80-default-rtdb.europe-west1.firebasedatabase.app/"
-    };
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
 
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
+<style>
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  font-family: Arial;
+  background: #0b1220;
+  color: white;
+}
 
-    async function loadData() {
-      const snapshot = await get(ref(db, "sensorData"));
+body {
+  display: flex;
+  flex-direction: column;
+}
 
-      const data = snapshot.val();
+.header {
+  padding: 12px;
+  font-size: 22px;
+  font-weight: bold;
+  text-align: center;
+}
 
-      let labels = [];
-      let temp = [];
-      let hum = [];
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  padding: 10px;
+  flex: 1;
+  min-height: 0;
+}
 
-      for (let key in data) {
-        labels.push(new Date(Number(key) * 1000).toLocaleTimeString());
-        temp.push(data[key].temp);
-        hum.push(data[key].humidity);
-      }
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: rgba(255,255,255,0.05);
+  border-radius: 14px;
+  padding: 10px;
+}
 
-      drawChart(labels, temp, hum);
-    }
+.title {
+  font-size: 16px;
+  margin-bottom: 6px;
+}
 
-    function drawChart(labels, temp, hum) {
-      new Chart(document.getElementById("chart"), {
-        type: "line",
-        data: {
-          labels: labels,
-          datasets: [
-            {
-              label: "Temperature (C)",
-              data: temp,
-              borderColor: "red"
-            },
-            {
-              label: "Humidity (%)",
-              data: hum,
-              borderColor: "blue"
-            }
-          ]
-        }
-      });
-    }
+.value {
+  font-size: 22px;
+  margin-bottom: 8px;
+}
 
-    window.onload = loadData;
-  </script>
+.chart {
+  flex: 1;
+  min-height: 0;
+}
+
+canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.loginBox {
+  width: 280px;
+  background: rgba(255,255,255,0.08);
+  padding: 20px;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+input {
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  outline: none;
+}
+
+button {
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  background: #1f6feb;
+  color: white;
+  font-weight: bold;
+}
+</style>
 </head>
 
 <body>
-  <h2>ESP32 Sensor Dashboard</h2>
-  <canvas id="chart"></canvas>
+
+<div class="overlay" id="overlay">
+  <div class="loginBox">
+    <input id="email" placeholder="email">
+    <input id="password" type="password" placeholder="password">
+    <button id="loginBtn">Login</button>
+  </div>
+</div>
+
+<div class="header">ESP32 Dashboard</div>
+
+<div class="grid">
+  <div class="panel">
+    <div class="title">Temperature</div>
+    <div class="value" id="temp">--</div>
+    <div class="chart">
+      <canvas id="tempChart"></canvas>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="title">Humidity</div>
+    <div class="value" id="hum">--</div>
+    <div class="chart">
+      <canvas id="humChart"></canvas>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="title">Pressure</div>
+    <div class="value" id="press">--</div>
+    <div class="chart">
+      <canvas id="pressChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, onChildAdded, query, limitToLast } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAHyqAn2BIzD11xoM2kouS0j4j8guwWKEY",
+  databaseURL: "https://esp32-a4c80-default-rtdb.europe-west1.firebasedatabase.app/"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const auth = getAuth(app);
+
+let tempChart;
+let humChart;
+let pressChart;
+let started = false;
+
+function makeChart(ctx, label, color) {
+  return new Chart(ctx, {
+    type: "line",
+    data: {
+      datasets: [{
+        label,
+        data: [],
+        borderColor: color,
+        tension: 0.25,
+        pointRadius: 3
+      }]
+    },
+    options: {
+      animation: false,
+      parsing: false,
+      normalized: true,
+      maintainAspectRatio: false,
+      layout: {
+        padding: { bottom: 20 }
+      },
+      scales: {
+        x: {
+          type: "time",
+          time: { unit: "minute" },
+          ticks: { color: "white" }
+        },
+        y: {
+          ticks: { color: "white" }
+        }
+      },
+      plugins: {
+        legend: { labels: { color: "white" } },
+        zoom: {
+          zoom: {
+            wheel: { enabled: true },
+            pinch: { enabled: true },
+            mode: "x"
+          },
+          pan: {
+            enabled: true,
+            mode: "x"
+          }
+        }
+      }
+    }
+  });
+}
+
+function upsert(chart, ts, value) {
+  chart.data.datasets[0].data.push({
+    x: ts * 1000,
+    y: value
+  });
+
+  const DAY = 24 * 3600 * 1000;
+  const minTime = Date.now() - DAY;
+
+  chart.data.datasets[0].data =
+    chart.data.datasets[0].data.filter(p => p.x > minTime);
+
+  chart.update("none");
+}
+
+const dataRef = query(ref(db, "sensorData"), limitToLast(500));
+
+function start() {
+  if (started) return;
+  started = true;
+
+  document.getElementById("overlay").style.display = "none";
+
+  tempChart = makeChart(document.getElementById("tempChart"), "Temp", "orange");
+  humChart = makeChart(document.getElementById("humChart"), "Humidity", "deepskyblue");
+  pressChart = makeChart(document.getElementById("pressChart"), "Pressure", "lime");
+
+  onChildAdded(dataRef, (snapshot) => {
+    const key = snapshot.key;
+    const val = snapshot.val();
+
+    const ts = Number(key);
+
+    document.getElementById("temp").innerText = val.temp + "°C";
+    document.getElementById("hum").innerText = val.humidity + "%";
+    document.getElementById("press").innerText = val.pressure + " hPa";
+
+    upsert(tempChart, ts, val.temp);
+    upsert(humChart, ts, val.humidity);
+    upsert(pressChart, ts, val.pressure);
+  });
+}
+
+document.getElementById("loginBtn").onclick = () => {
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+  signInWithEmailAndPassword(auth, email, password);
+};
+
+onAuthStateChanged(auth, (user) => {
+  if (user) start();
+});
+</script>
+
 </body>
 </html>
