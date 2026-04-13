@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>ESP32 Sensor Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAHyqAn2BIzD11xoM2kouS0j4j8guwWKEY",
+      databaseURL: "https://esp32-a4c80-default-rtdb.europe-west1.firebasedatabase.app/"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    async function loadData() {
+      const snapshot = await get(ref(db, "sensorData"));
+
+      const data = snapshot.val();
+
+      let labels = [];
+      let temp = [];
+      let hum = [];
+
+      for (let key in data) {
+        labels.push(new Date(Number(key) * 1000).toLocaleTimeString());
+        temp.push(data[key].temp);
+        hum.push(data[key].humidity);
+      }
+
+      drawChart(labels, temp, hum);
+    }
+
+    function drawChart(labels, temp, hum) {
+      new Chart(document.getElementById("chart"), {
+        type: "line",
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: "Temperature (C)",
+              data: temp,
+              borderColor: "red"
+            },
+            {
+              label: "Humidity (%)",
+              data: hum,
+              borderColor: "blue"
+            }
+          ]
+        }
+      });
+    }
+
+    window.onload = loadData;
+  </script>
+</head>
+
+<body>
+  <h2>ESP32 Sensor Dashboard</h2>
+  <canvas id="chart"></canvas>
+</body>
+</html>
