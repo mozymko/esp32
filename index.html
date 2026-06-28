@@ -274,7 +274,7 @@
                 }
             }
 
-            const dataRef = query(ref(db, "sensorData"), limitToLast(110000));
+            const dataRef = query(ref(db, "sensorData"), limitToLast(125000));
 
             function start() {
                 if (started) return;
