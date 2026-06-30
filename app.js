@@ -14,6 +14,22 @@ const chartService = new ChartService();
 let started = false;
 let rangeHours = 1;
 
+function updateButtonStates(isFetchComplete = false) {
+    if (store.time.length === 0) return;
+    
+    const latestTimestamp = store.time[store.time.length - 1];
+    const oldestTimestamp = store.time[0];
+    const availableHours = (latestTimestamp - oldestTimestamp) / 3600;
+
+    document.querySelectorAll(".rangeBtn").forEach(btn => {
+        const range = Number(btn.dataset.range);
+        
+        if (isFetchComplete || availableHours >= range || range === 1) {
+            btn.disabled = false;
+        }
+    });
+}
+
 async function startApp() {
     if (started) return;
     started = true;
@@ -23,12 +39,15 @@ async function startApp() {
     setupEventListeners();
 
     await firebaseService.fetchInitial(store, 1000);
+    
     if (store.time.length > 0) {
         const lastIdx = store.time.length - 1;
         document.getElementById("temp").innerText = store.temp[lastIdx] + "°C";
         document.getElementById("hum").innerText = store.hum[lastIdx] + "%";
         document.getElementById("press").innerText = store.press[lastIdx] + " hPa";
     }
+
+    updateButtonStates(false);
 
     chartService.render(store, rangeHours, true);
 
@@ -43,15 +62,18 @@ async function backgroundFetchOlderData() {
     let hasMore = true;
     let iterations = 0;
 
-    while (hasMore && iterations < 20) {
-        hasMore = await firebaseService.fetchOlder(store, 20000);
+    while (hasMore && iterations < 25) {
+        hasMore = await firebaseService.fetchOlder(store, 10000);
         
         if (hasMore) {
             chartService.render(store, rangeHours, false);
+            updateButtonStates(false);
             await new Promise(resolve => setTimeout(resolve, 500));
         }
         iterations++;
     }
+
+    updateButtonStates(true);
 }
 
 function setupEventListeners() {
@@ -61,6 +83,8 @@ function setupEventListeners() {
 
     document.querySelectorAll(".rangeBtn").forEach(btn => {
         btn.onclick = () => {
+            if (btn.disabled) return;
+            
             document.querySelectorAll(".rangeBtn").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
             rangeHours = Number(btn.dataset.range);
