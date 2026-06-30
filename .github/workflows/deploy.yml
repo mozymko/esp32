@@ -26,8 +26,8 @@ jobs:
 
       - name: Inject Firebase API Key and DB URL
         run: |
-          sed -i 's|FIREBASE_API_KEY|${{ secrets.APIKEY }}|g' index.html
-          sed -i 's|DATABASE_URL|${{ secrets.DATABASEURL }}|g' index.html
+          sed -i 's|FIREBASE_API_KEY|${{ secrets.APIKEY }}|g' app.js
+          sed -i 's|DATABASE_URL|${{ secrets.DATABASEURL }}|g' app.js
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

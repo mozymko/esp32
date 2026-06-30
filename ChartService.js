@@ -15,9 +15,10 @@ export class ChartService {
     render(store, rangeHours, updateAxis = true) {
         if (!this.renderTimeout) {
             this.renderTimeout = requestAnimationFrame(() => {
-                this.tempPlot.setData([store.time, store.temp]);
-                this.humPlot.setData([store.time, store.hum]);
-                this.pressPlot.setData([store.time, store.press]);
+                
+                if (this.tempPlot) this.tempPlot.setData([store.time, store.temp], false);
+                if (this.humPlot) this.humPlot.setData([store.time, store.hum], false);
+                if (this.pressPlot) this.pressPlot.setData([store.time, store.press], false);
 
                 if (updateAxis) {
                     this.updateRange(store, rangeHours);
@@ -29,21 +30,24 @@ export class ChartService {
     }
 
     updateRange(store, rangeHours) {
+        if (store.time.length === 0) return;
+
+        const latestTimestamp = store.time[store.time.length - 1];
+        const oldestTimestamp = store.time[0];
+
+        let minTime, maxTime;
+
         if (rangeHours >= 1440) {
-            const minTime = store.time.length > 0 ? store.time[0] : null;
-            const maxTime = store.time.length > 0 ? store.time[store.time.length - 1] : null;
-            if (minTime) {
-                [this.tempPlot, this.humPlot, this.pressPlot].forEach(p => p.setScale('x', { min: minTime, max: maxTime }));
-            }
-            return;
+            minTime = oldestTimestamp;
+            maxTime = latestTimestamp;
+        } else {
+            maxTime = latestTimestamp;
+            minTime = latestTimestamp - (rangeHours * 3600);
         }
 
-        const nowSec = Math.floor(Date.now() / 1000);
-        const rangeSec = rangeHours * 3600;
-
-        [this.tempPlot, this.humPlot, this.pressPlot].forEach(p => {
-            if (p) p.setScale('x', { min: nowSec - rangeSec, max: nowSec });
-        });
+        if (this.tempPlot) this.tempPlot.setScale('x', { min: minTime, max: maxTime });
+        if (this.humPlot) this.humPlot.setScale('x', { min: minTime, max: maxTime });
+        if (this.pressPlot) this.pressPlot.setScale('x', { min: minTime, max: maxTime });
     }
 
     _makePlot(container, label, strokeColor, fillColor, min, max) {
@@ -55,7 +59,7 @@ export class ChartService {
                 { stroke: "white", grid: { stroke: "rgba(255,255,255,0.1)" } }
             ],
             scales: {
-                x: { time: true, auto: false },
+                x: { time: true },
                 y: { range: [min, max], auto: false }
             },
             series: [
@@ -69,7 +73,10 @@ export class ChartService {
 
         new ResizeObserver(entries => {
             for (let entry of entries) {
-                u.setSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+                u.setSize({ 
+                    width: entry.contentRect.width, 
+                    height: entry.contentRect.height - 25
+                });
             }
         }).observe(container);
 

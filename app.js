@@ -12,7 +12,7 @@ const firebaseService = new FirebaseService(firebaseConfig);
 const chartService = new ChartService();
 
 let started = false;
-let rangeHours = 1440;
+let rangeHours = 1;
 
 async function startApp() {
     if (started) return;
@@ -23,10 +23,17 @@ async function startApp() {
     setupEventListeners();
 
     await firebaseService.fetchInitial(store, 1000);
-    chartService.render(store, rangeHours);
+    if (store.time.length > 0) {
+        const lastIdx = store.time.length - 1;
+        document.getElementById("temp").innerText = store.temp[lastIdx] + "°C";
+        document.getElementById("hum").innerText = store.hum[lastIdx] + "%";
+        document.getElementById("press").innerText = store.press[lastIdx] + " hPa";
+    }
+
+    chartService.render(store, rangeHours, true);
 
     firebaseService.subscribeToLive(store, () => {
-        chartService.render(store, rangeHours);
+        chartService.render(store, rangeHours, false);
     });
 
     backgroundFetchOlderData();
@@ -37,7 +44,7 @@ async function backgroundFetchOlderData() {
     let iterations = 0;
 
     while (hasMore && iterations < 20) {
-        hasMore = await firebaseService.fetchOlder(store, 5000);
+        hasMore = await firebaseService.fetchOlder(store, 20000);
         
         if (hasMore) {
             chartService.render(store, rangeHours, false);
@@ -49,7 +56,7 @@ async function backgroundFetchOlderData() {
 
 function setupEventListeners() {
     window.addEventListener("dblclick", () => {
-        chartService.updateRange(store, rangeHours);
+        chartService.render(store, rangeHours, true);
     });
 
     document.querySelectorAll(".rangeBtn").forEach(btn => {
@@ -57,7 +64,8 @@ function setupEventListeners() {
             document.querySelectorAll(".rangeBtn").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
             rangeHours = Number(btn.dataset.range);
-            chartService.updateRange(store, rangeHours);
+            
+            chartService.render(store, rangeHours, true);
         };
     });
 }
