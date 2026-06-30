@@ -16,12 +16,19 @@ export class ChartService {
         if (!this.renderTimeout) {
             this.renderTimeout = requestAnimationFrame(() => {
                 
+                const currentMin = this.tempPlot ? this.tempPlot.scales.x.min : null;
+                const currentMax = this.tempPlot ? this.tempPlot.scales.x.max : null;
+
                 if (this.tempPlot) this.tempPlot.setData([store.time, store.temp], false);
                 if (this.humPlot) this.humPlot.setData([store.time, store.hum], false);
                 if (this.pressPlot) this.pressPlot.setData([store.time, store.press], false);
 
                 if (updateAxis) {
                     this.updateRange(store, rangeHours);
+                } else if (currentMin != null && currentMax != null) {
+                    if (this.tempPlot) this.tempPlot.setScale('x', { min: currentMin, max: currentMax });
+                    if (this.humPlot) this.humPlot.setScale('x', { min: currentMin, max: currentMax });
+                    if (this.pressPlot) this.pressPlot.setScale('x', { min: currentMin, max: currentMax });
                 }
                 
                 this.renderTimeout = null;
@@ -75,7 +82,7 @@ export class ChartService {
             for (let entry of entries) {
                 u.setSize({ 
                     width: entry.contentRect.width, 
-                    height: entry.contentRect.height - 25
+                    height: entry.contentRect.height - 55 
                 });
             }
         }).observe(container);
