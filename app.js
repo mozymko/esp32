@@ -1,0 +1,75 @@
+import { DataStore } from "./DataStore.js";
+import { ChartService } from "./ChartService.js";
+import { FirebaseService } from "./FirebaseService.js";
+
+const firebaseConfig = {
+    apiKey: "FIREBASE_API_KEY",
+    databaseURL: "DATABASE_URL"
+};
+
+const store = new DataStore();
+const firebaseService = new FirebaseService(firebaseConfig);
+const chartService = new ChartService();
+
+let started = false;
+let rangeHours = 1440;
+
+async function startApp() {
+    if (started) return;
+    started = true;
+
+    document.getElementById("overlay").style.display = "none";
+    chartService.initCharts();
+    setupEventListeners();
+
+    await firebaseService.fetchInitial(store, 1000);
+    chartService.render(store, rangeHours);
+
+    firebaseService.subscribeToLive(store, () => {
+        chartService.render(store, rangeHours);
+    });
+
+    backgroundFetchOlderData();
+}
+
+async function backgroundFetchOlderData() {
+    let hasMore = true;
+    let iterations = 0;
+
+    while (hasMore && iterations < 20) {
+        hasMore = await firebaseService.fetchOlder(store, 5000);
+        
+        if (hasMore) {
+            chartService.render(store, rangeHours, false);
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        iterations++;
+    }
+}
+
+function setupEventListeners() {
+    window.addEventListener("dblclick", () => {
+        chartService.updateRange(store, rangeHours);
+    });
+
+    document.querySelectorAll(".rangeBtn").forEach(btn => {
+        btn.onclick = () => {
+            document.querySelectorAll(".rangeBtn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            rangeHours = Number(btn.dataset.range);
+            chartService.updateRange(store, rangeHours);
+        };
+    });
+}
+
+document.getElementById("loginBtn").onclick = () => {
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
+    
+    firebaseService.login(email, password)
+        .catch(error => alert("Błąd: " + error.message));
+};
+
+firebaseService.onAuth((user) => {
+    if (user) startApp();
+});
